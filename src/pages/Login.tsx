@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,7 @@ const Login = () => {
     userType: 'patient'
   });
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!loginData.email || !loginData.password) {
@@ -30,14 +31,46 @@ const Login = () => {
       return;
     }
 
-    // Here you would implement actual authentication with Supabase
-    toast({
-      title: "Login successful!",
-      description: `Welcome back to Therapal!`,
-    });
-    
-    // Redirect based on user type
-    // This would be handled by your authentication system
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginData.email,
+        password: loginData.password
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Fetch user role and redirect
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', data.user.id)
+          .single();
+
+        toast({
+          title: "Login successful!",
+          description: "Welcome back to Therapal!",
+        });
+
+        // Redirect based on role
+        switch (profile?.role) {
+          case 'doctor':
+            window.location.href = '/doctor-dashboard';
+            break;
+          case 'admin':
+            window.location.href = '/admin-dashboard';
+            break;
+          default:
+            window.location.href = '/patient-dashboard';
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   const handleInputChange = (field: string, value: string) => {

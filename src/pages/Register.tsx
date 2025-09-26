@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,7 +38,7 @@ const Register = () => {
     privacyAccepted: false
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Basic validation
@@ -68,11 +69,52 @@ const Register = () => {
       return;
     }
 
-    // Here you would implement actual registration with Supabase
-    toast({
-      title: "Registration successful!",
-      description: `Welcome to Therapal! Please check your email to verify your account.`,
-    });
+    if (registerType === 'doctor' && (!formData.specialty || !formData.licenseNumber)) {
+      toast({
+        title: "Doctor information required",
+        description: "Please fill in your specialty and license number.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const userData = {
+        full_name: `${formData.firstName} ${formData.lastName}`,
+        role: registerType === 'doctor' ? 'doctor' : 'user',
+        phone: formData.phone,
+        ...(registerType === 'doctor' && {
+          specialization: formData.specialty,
+          license_number: formData.licenseNumber,
+          bio: formData.bio,
+          qualifications: formData.qualifications,
+          experience: formData.experience,
+          languages: formData.language
+        })
+      };
+
+      const { error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: userData
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Registration successful!",
+        description: "Please check your email to verify your account.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Registration failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   const handleInputChange = (field: string, value: string | boolean) => {
