@@ -24,8 +24,7 @@ const BookAppointment = () => {
     appointmentDate: '',
     appointmentTime: '',
     duration: '60',
-    notes: '',
-    paymentMethod: 'card'
+    notes: ''
   });
 
   useEffect(() => {
@@ -82,32 +81,68 @@ const BookAppointment = () => {
       const appointmentDateTime = new Date(`${formData.appointmentDate}T${formData.appointmentTime}`);
       const selectedDoctor = doctors.find((doc: any) => doc.id === formData.doctorId);
       
-      const { error } = await supabase
-        .from('appointments')
-        .insert({
-          patient_id: user.id,
-          doctor_id: selectedDoctor.user_id,
-          appointment_date: appointmentDateTime.toISOString(),
-          duration_minutes: parseInt(formData.duration),
-          total_amount: parseFloat(calculateTotal()),
-          notes: formData.notes,
-          status: 'pending',
-          payment_status: 'pending'
-        });
+      // Get user profile for payment
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
 
-      if (error) throw error;
+      if (!userProfile) {
+        throw new Error('User profile not found');
+      }
 
-      toast({
-        title: "Appointment booked!",
-        description: "Your appointment request has been sent to the doctor for approval.",
+      // Prepare appointment data for payment
+      const appointmentData = {
+        patient_id: user.id,
+        doctor_id: selectedDoctor.user_id,
+        appointment_date: appointmentDateTime.toISOString(),
+        duration_minutes: parseInt(formData.duration),
+        total_amount: parseFloat(calculateTotal()),
+        notes: formData.notes,
+      };
+
+      // Create payment with IremboPay
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment', {
+        body: {
+          appointmentData,
+          userProfile
+        }
       });
 
-      navigate('/patient-dashboard');
+      if (paymentError) {
+        console.error('Payment creation error:', paymentError);
+        throw new Error('Failed to create payment');
+      }
+
+      if (!paymentData.success) {
+        console.error('Payment service error:', paymentData);
+        throw new Error(paymentData.error || 'Payment service failed');
+      }
+
+      // Store appointment with payment reference
+      const { error: appointmentError } = await supabase
+        .from('appointments')
+        .insert({
+          ...appointmentData,
+          status: 'pending',
+          payment_status: 'pending',
+          payment_id: paymentData.transactionId
+        });
+
+      if (appointmentError) {
+        console.error('Appointment creation error:', appointmentError);
+        throw appointmentError;
+      }
+
+      // Redirect to payment
+      window.location.href = paymentData.paymentLinkUrl;
+
     } catch (error) {
       console.error('Error booking appointment:', error);
       toast({
         title: "Booking failed",
-        description: "There was an error booking your appointment. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error booking your appointment. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -234,18 +269,16 @@ const BookAppointment = () => {
                 />
               </div>
 
-              {/* Payment Method */}
-              <div className="space-y-2">
-                <Label htmlFor="payment">Payment Method</Label>
-                <Select value={formData.paymentMethod} onValueChange={(value) => handleInputChange('paymentMethod', value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="card">Credit/Debit Card</SelectItem>
-                    <SelectItem value="momo">Mobile Money (Momo)</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Payment Info */}
+              <div className="bg-accent/20 rounded-lg p-4">
+                <div className="flex items-center space-x-2 mb-2">
+                  <CreditCard className="w-5 h-5 text-primary" />
+                  <span className="font-medium">Secure Payment via IremboPay</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  You will be redirected to IremboPay to complete your payment securely. 
+                  Payment is required to confirm your appointment.
+                </p>
               </div>
 
               {/* Total Cost */}
@@ -277,7 +310,7 @@ const BookAppointment = () => {
                 ) : (
                   <>
                     <CreditCard className="w-4 h-4 mr-2" />
-                    Book Appointment
+                    Book & Pay Now
                   </>
                 )}
               </Button>
