@@ -37,7 +37,7 @@ const BookAppointment = () => {
         .from('doctors')
         .select(`
           *,
-          profile:profiles!doctors_user_id_fkey(full_name, email)
+          profiles(full_name, email)
         `)
         .eq('is_approved', true);
 
@@ -204,7 +204,7 @@ const BookAppointment = () => {
                       <SelectItem key={doctor.id} value={doctor.id}>
                         <div className="flex flex-col">
                           <span className="font-medium">
-                            Dr. {doctor.profile?.full_name || 'Unknown'}
+                            Dr. {doctor.profiles?.full_name || 'Unknown'}
                           </span>
                           <span className="text-sm text-muted-foreground">
                             {doctor.specialization} - ${doctor.hourly_rate}/hour
