@@ -37,7 +37,7 @@ const BookAppointment = () => {
         .from('doctors')
         .select(`
           *,
-          profiles(full_name, email)
+          profiles!doctors_user_id_fkey(full_name, email)
         `)
         .eq('is_approved', true);
 
@@ -45,6 +45,18 @@ const BookAppointment = () => {
       setDoctors(data || []);
     } catch (error) {
       console.error('Error fetching doctors:', error);
+      // Fallback: fetch doctors without profile join
+      try {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('doctors')
+          .select('*')
+          .eq('is_approved', true);
+        
+        if (fallbackError) throw fallbackError;
+        setDoctors(fallbackData || []);
+      } catch (fallbackError) {
+        console.error('Fallback error:', fallbackError);
+      }
     } finally {
       setLoading(false);
     }
@@ -204,7 +216,7 @@ const BookAppointment = () => {
                       <SelectItem key={doctor.id} value={doctor.id}>
                         <div className="flex flex-col">
                           <span className="font-medium">
-                            Dr. {doctor.profiles?.full_name || 'Unknown'}
+                            Dr. {doctor.profiles?.full_name || doctor.full_name || 'Unknown Doctor'}
                           </span>
                           <span className="text-sm text-muted-foreground">
                             {doctor.specialization} - ${doctor.hourly_rate}/hour
