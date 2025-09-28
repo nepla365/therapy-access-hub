@@ -166,7 +166,7 @@ const PatientDashboard = () => {
                           {appointment.status}
                         </span>
                         <p className="text-sm text-muted-foreground mt-1">
-                          ${appointment.total_amount}
+                          {appointment.total_amount} RWF
                         </p>
                       </div>
                     </div>

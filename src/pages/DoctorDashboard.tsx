@@ -188,7 +188,7 @@ const DoctorDashboard = () => {
                         </span>
                         
                         <p className="text-sm font-medium">
-                          ${appointment.total_amount}
+                          {appointment.total_amount} RWF
                         </p>
                         
                         {appointment.status === 'pending' && (

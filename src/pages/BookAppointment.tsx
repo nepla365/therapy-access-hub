@@ -403,45 +403,31 @@ const BookAppointment = () => {
     return Math.round(hourlyRate * hours); // no decimals for RWF
   };
 
-  // 🔑 Function to create Irembo invoice
-  const createIremboInvoice = async (doctor: any, customer: any, amount: number) => {
-    const url = "https://api.sandbox.irembopay.com/payments/invoices"; // switch to prod later
-    const secretKey = "sk_test_yourSandboxKey"; // replace with your sandbox/prod key
-
-    const headers = new Headers();
-    headers.append("Content-Type", "application/json");
-    headers.append("Accept", "application/json");
-    headers.append("irembopay-secretKey", secretKey);
-
-    const data = JSON.stringify({
-      transactionId: "BOOK-" + Date.now(), // unique
-      paymentAccountIdentifier: "TST-RWF", // use your account code
-      customer: {
-        email: customer.email,
-        phoneNumber: customer.phone,
-        name: customer.name,
-      },
-      paymentItems: [
-        {
-          unitAmount: amount,
-          quantity: 1,
-          code: "CONSULT-" + doctor.id,
-        },
-      ],
-      description: `Consultation with Dr. ${doctor.full_name || "Doctor"}`,
-      expiryAt: "2025-12-31T23:59:59+02:00",
-      language: "EN",
-    });
-
-    const requestOptions: RequestInit = {
-      method: "POST",
-      headers,
-      body: data,
-      redirect: "follow",
+  // Function to create appointment and handle payment through Supabase edge function
+  const createAppointmentWithPayment = async (doctor: any, customer: any, amount: number) => {
+    const appointmentData = {
+      patient_id: user?.id,
+      doctor_id: doctor.user_id,
+      appointment_date: new Date(`${formData.appointmentDate}T${formData.appointmentTime}`).toISOString(),
+      duration_minutes: parseInt(formData.duration),
+      total_amount: amount,
+      notes: formData.notes,
     };
 
-    const response = await fetch(url, requestOptions);
-    return response.json();
+    // Call Supabase edge function which handles Irembo API
+    const { data, error } = await supabase.functions.invoke('create-payment', {
+      body: {
+        appointmentData,
+        userProfile: customer
+      }
+    });
+
+    if (error) {
+      console.error("Payment error:", error);
+      throw new Error("Failed to create payment");
+    }
+
+    return data;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -475,42 +461,40 @@ const BookAppointment = () => {
 
       const totalAmount = calculateTotal();
 
-      // 1️⃣ Create invoice in Irembo
-      const invoiceResponse = await createIremboInvoice(
+      // 1️⃣ Create appointment with payment through Supabase edge function
+      const paymentResponse = await createAppointmentWithPayment(
         selectedDoctor,
         {
-          name: userProfile.full_name || "Patient",
+          full_name: userProfile.full_name || "Patient",
           email: userProfile.email,
-          phone: userProfile.phone_number,
+          phone: userProfile.phone,
         },
         totalAmount
       );
 
-      console.log("Irembo response:", invoiceResponse);
+      console.log("Payment response:", paymentResponse);
 
-      if (!invoiceResponse?.invoiceUrl) {
-        throw new Error("Failed to create Irembo invoice");
+      if (!paymentResponse?.paymentLinkUrl) {
+        throw new Error("Failed to create payment link");
       }
 
-      // 2️⃣ Save appointment in Supabase (status pending until paid)
-      const { error: appointmentError } = await supabase
-        .from('appointments')
-        .insert({
-          patient_id: user.id,
-          doctor_id: selectedDoctor.user_id,
-          appointment_date: appointmentDateTime.toISOString(),
-          duration_minutes: parseInt(formData.duration),
-          total_amount: totalAmount,
-          notes: formData.notes,
-          status: 'pending',
-          payment_status: 'pending',
-          payment_id: invoiceResponse.transactionId
-        });
+      // Redirect to IremboPay
+      window.open(paymentResponse.paymentLinkUrl, '_blank');
 
-      if (appointmentError) throw appointmentError;
+      // Show success message
+      toast({
+        title: "Payment Created",
+        description: "Please complete your payment to confirm the appointment.",
+      });
 
-      // 3️⃣ Redirect to IremboPay
-      window.location.href = invoiceResponse.invoiceUrl;
+      // Reset form
+      setFormData({
+        doctorId: '',
+        appointmentDate: '',
+        appointmentTime: '',
+        duration: '60',
+        notes: ''
+      });
 
     } catch (err: any) {
       console.error('Error booking appointment:', err);
