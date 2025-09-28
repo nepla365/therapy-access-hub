@@ -19,18 +19,18 @@ const PatientDashboard = () => {
     if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          *,
-          doctors(
-            specialization,
-            hourly_rate,
-            profiles(full_name)
-          )
-        `)
-        .eq('patient_id', user.id)
-        .order('appointment_date', { ascending: true });
+    const { data, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        doctors!appointments_doctor_id_fkey(
+          specialization,
+          hourly_rate,
+          profiles!doctors_user_id_fkey(full_name)
+        )
+      `)
+      .eq('patient_id', user.id)
+      .order('appointment_date', { ascending: true });
 
       if (error) throw error;
       setAppointments(data || []);

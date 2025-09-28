@@ -146,6 +146,8 @@ serve(async (req) => {
   try {
     const { appointmentData, userProfile } = await req.json();
 
+    console.log("Received payment request:", { appointmentData, userProfile });
+
     // Validate required data
     if (!appointmentData || !userProfile) {
       return new Response(
@@ -155,6 +157,9 @@ serve(async (req) => {
     }
 
     const irembopaySecretKey = Deno.env.get("IREMBO_PAY_SECRET_KEY");
+    console.log("Secret key exists:", !!irembopaySecretKey);
+    console.log("Secret key length:", irembopaySecretKey?.length || 0);
+    
     if (!irembopaySecretKey) {
       console.error("IREMBO_PAY_SECRET_KEY not found");
       return new Response(
@@ -175,7 +180,7 @@ serve(async (req) => {
       paymentAccountIdentifier: "TST-RWF",
       customer: {
         email: userProfile.email,
-        phoneNumber: userProfile.phone || "0780000001",
+        phoneNumber: userProfile.phone || "+250780000001", // Default phone if null
         name: userProfile.full_name,
       },
       paymentItems: [

@@ -467,7 +467,7 @@ const BookAppointment = () => {
         {
           full_name: userProfile.full_name || "Patient",
           email: userProfile.email,
-          phone: userProfile.phone,
+          phone: userProfile.phone || "+250780000001", // Default phone if null
         },
         totalAmount
       );
